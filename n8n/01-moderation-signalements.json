@@ -1,0 +1,375 @@
+{
+  "name": "L'Agora — Modération des signalements",
+  "nodes": [
+    {
+      "id": "ce6d9ac1-7286-4542-8595-7c4dcc09c8fa",
+      "name": "Signalement reçu",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agora-signalement",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "webhookId": "0b51f2b5-61d0-4eb9-b772-c5ca5927683f"
+    },
+    {
+      "id": "6a7ddcf1-3d8f-4474-a920-589edbda5066",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a6e4cb81-9366-49e5-acb5-1d11c9c7fa97",
+              "name": "supabase_url",
+              "value": "https://VOTRE-PROJET.supabase.co",
+              "type": "string"
+            },
+            {
+              "id": "e40c0234-700c-489a-9bf8-2a0836f6089c",
+              "name": "app_url",
+              "value": "https://VOTRE-COMPTE.github.io/e-consult/",
+              "type": "string"
+            },
+            {
+              "id": "7a1cc7d5-c93e-4c33-b8f6-f753c6aa9f58",
+              "name": "moderateurs",
+              "value": "communication@VOTRE-HOPITAL.fr, drh@VOTRE-HOPITAL.fr",
+              "type": "string"
+            },
+            {
+              "id": "8775faf3-a174-4164-87b9-4158968ab033",
+              "name": "seuil_masquage",
+              "value": "3",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      }
+    },
+    {
+      "id": "bd0e6145-8d59-4b82-bc2e-98d65d745dda",
+      "name": "Normaliser",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Accepte un Database Webhook Supabase ({record}) ou l'appel direct du front ({post_id, reason})\nconst b = $json.body || $json;\nconst r = b.record || b;\nreturn [{ json: { ...$('Config').first().json, post_id: r.post_id, reason: r.reason || 'non précisé' } }];"
+      }
+    },
+    {
+      "id": "f8cd88c6-5645-4e6e-b31f-f779a5d5fcc9",
+      "name": "Lire la publication",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.supabase_url }}/rest/v1/posts",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {},
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "id",
+              "value": "=eq.{{ $json.post_id }}"
+            },
+            {
+              "name": "select",
+              "value": "id,title,body,kind,status"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Supabase service key (header apikey)"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "38a93f12-0b75-4771-b9b3-6ed8c87388d4",
+      "name": "Compter les signalements",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Normaliser').first().json.supabase_url }}/rest/v1/reports",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {},
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "post_id",
+              "value": "=eq.{{ $('Normaliser').first().json.post_id }}"
+            },
+            {
+              "name": "status",
+              "value": "eq.open"
+            },
+            {
+              "name": "select",
+              "value": "id"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Supabase service key (header apikey)"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "ebbdf271-fc5e-45da-8bbc-73559090f860",
+      "name": "Synthèse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const cfg = $('Normaliser').first().json;\nconst post = $('Lire la publication').first().json || {};\nconst count = $('Compter les signalements').all().filter(i => i.json && i.json.id).length;\nreturn [{ json: { ...cfg, post, count, autoHide: count >= Number(cfg.seuil_masquage) && post.status === 'published' } }];"
+      }
+    },
+    {
+      "id": "ec9e611d-e0e0-4119-b139-b47fbede6e1c",
+      "name": "Seuil atteint ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "18183d3a-cf71-4f19-bf58-82cdaf2cad16",
+              "leftValue": "={{ $json.autoHide }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "762c08de-213f-4e3e-854e-5b27c8bf675a",
+      "name": "Masquer automatiquement",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        200
+      ],
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $json.supabase_url }}/rest/v1/posts",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {},
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "id",
+              "value": "=eq.{{ $json.post.id }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"status\":\"hidden\"}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Supabase service key (header apikey)"
+        }
+      }
+    },
+    {
+      "id": "d6bed4ff-ee39-4b1a-8191-b9d33cdfa075",
+      "name": "Alerter les modérateurs",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1760,
+        300
+      ],
+      "parameters": {
+        "fromEmail": "agora@VOTRE-HOPITAL.fr",
+        "toEmail": "={{ $('Synthèse').first().json.moderateurs }}",
+        "subject": "={{ $('Synthèse').first().json.autoHide ? '[L\\'Agora] Publication masquée automatiquement' : '[L\\'Agora] Nouveau signalement' }}",
+        "emailFormat": "html",
+        "html": "=<h2>Signalement sur L'Agora</h2>\n<p><b>Motif :</b> {{ $('Synthèse').first().json.reason }}</p>\n<p><b>Publication :</b> {{ $('Synthèse').first().json.post.title }}<br>{{ $('Synthèse').first().json.post.body }}</p>\n<p>{{ $('Synthèse').first().json.count }} signalement(s) ouvert(s). {{ $('Synthèse').first().json.autoHide ? 'La publication a été masquée en attendant votre décision.' : '' }}</p>\n<p><a href=\"{{ $('Synthèse').first().json.app_url }}#/moderation\">Ouvrir l'espace modération</a></p>",
+        "options": {}
+      },
+      "credentials": {
+        "smtp": {
+          "id": "",
+          "name": "SMTP hôpital / Gmail"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Signalement reçu": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Normaliser",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normaliser": {
+      "main": [
+        [
+          {
+            "node": "Lire la publication",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire la publication": {
+      "main": [
+        [
+          {
+            "node": "Compter les signalements",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compter les signalements": {
+      "main": [
+        [
+          {
+            "node": "Synthèse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Synthèse": {
+      "main": [
+        [
+          {
+            "node": "Seuil atteint ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Seuil atteint ?": {
+      "main": [
+        [
+          {
+            "node": "Masquer automatiquement",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alerter les modérateurs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Masquer automatiquement": {
+      "main": [
+        [
+          {
+            "node": "Alerter les modérateurs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

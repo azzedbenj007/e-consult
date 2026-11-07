@@ -1,0 +1,196 @@
+{
+  "name": "L'Agora — Saisie des menus du self",
+  "nodes": [
+    {
+      "id": "d36f1a26-c5b0-4b50-876a-5e2ec5f0aba5",
+      "name": "Formulaire équipe du self",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "formTitle": "L'Agora — Menus de la semaine",
+        "formDescription": "Pour chaque jour : Plat ; Plat végétarien ; Entrée ; Dessert (séparés par des points-virgules).",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Semaine du (lundi)",
+              "fieldType": "date",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Lundi — plat",
+              "requiredField": true,
+              "placeholder": "Plat ; Végé ; Entrée ; Dessert"
+            },
+            {
+              "fieldLabel": "Mardi — plat",
+              "requiredField": true,
+              "placeholder": "Plat ; Végé ; Entrée ; Dessert"
+            },
+            {
+              "fieldLabel": "Mercredi — plat",
+              "requiredField": true,
+              "placeholder": "Plat ; Végé ; Entrée ; Dessert"
+            },
+            {
+              "fieldLabel": "Jeudi — plat",
+              "requiredField": true,
+              "placeholder": "Plat ; Végé ; Entrée ; Dessert"
+            },
+            {
+              "fieldLabel": "Vendredi — plat",
+              "requiredField": true,
+              "placeholder": "Plat ; Végé ; Entrée ; Dessert"
+            },
+            {
+              "fieldLabel": "Thème (facultatif)",
+              "placeholder": "ex : Jeudi = Saveurs d'Orient"
+            }
+          ]
+        },
+        "options": {
+          "respondWithOptions": {
+            "values": {
+              "formSubmittedText": "Merci ! Les menus sont en ligne sur L'Agora."
+            }
+          }
+        }
+      },
+      "webhookId": "0305e91c-0e64-4581-8d9e-ae9428bda0e4"
+    },
+    {
+      "id": "f5834762-4e90-4022-8ab1-0728fa85a0df",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "32a771b3-39cd-4039-98b2-b5b7d236fc79",
+              "name": "supabase_url",
+              "value": "https://VOTRE-PROJET.supabase.co",
+              "type": "string"
+            },
+            {
+              "id": "cad40840-b568-4e52-96ba-5710ed0f7cd8",
+              "name": "app_url",
+              "value": "https://VOTRE-COMPTE.github.io/e-consult/",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      }
+    },
+    {
+      "id": "196d4659-b2f2-4f5b-8dbd-6117693b7c27",
+      "name": "Préparer les lignes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const f = $('Formulaire équipe du self').first().json;\nconst jours = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi'];\nconst start = new Date(f['Semaine du (lundi)']);\nconst theme = f['Thème (facultatif)'] || '';\nconst rows = jours.map((j, i) => {\n  const d = new Date(start); d.setDate(d.getDate() + i);\n  const [main, veggie, starter, dessert] = String(f[`${j} — plat`] || '').split(';').map(s => s.trim());\n  const th = theme.toLowerCase().startsWith(j.toLowerCase()) ? theme.split('=').pop().trim() : null;\n  return { day: d.toISOString().slice(0,10), main, veggie: veggie || null, starter: starter || null, dessert: dessert || null, theme: th };\n});\nreturn [{ json: { supabase_url: $('Config').first().json.supabase_url, rows } }];"
+      }
+    },
+    {
+      "id": "54989379-d3cf-46fd-b761-bbb7624b1280",
+      "name": "Publier dans Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.supabase_url }}/rest/v1/menus",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {},
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "on_conflict",
+              "value": "day"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates,return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.rows) }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Supabase service key (header apikey)"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Formulaire équipe du self": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Préparer les lignes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer les lignes": {
+      "main": [
+        [
+          {
+            "node": "Publier dans Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}
