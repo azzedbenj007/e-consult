@@ -45,7 +45,7 @@ $$;
 --    Doublé côté client (docs/js/filter.js) — le serveur fait foi.
 -- ---------------------------------------------------------------------
 create or replace function public.sensitive_reason(txt text)
-returns text language plpgsql immutable as $$
+returns text language plpgsql immutable set search_path = public as $$
 declare t text := coalesce(txt, '');
 begin
   -- N° de sécurité sociale (NIR) : 13 chiffres + clé, espaces tolérés
@@ -71,7 +71,7 @@ begin
 end $$;
 
 create or replace function public.block_sensitive()
-returns trigger language plpgsql as $$
+returns trigger language plpgsql set search_path = public as $$
 declare r text;
 begin
   r := public.sensitive_reason(coalesce(new.title,'') || ' ' || coalesce(new.body,''));
