@@ -249,5 +249,13 @@
     };
   }
 
-  window.Store = C.SUPABASE_URL && C.SUPABASE_ANON_KEY && window.supabase ? SupabaseStore() : DemoStore();
+  // ?demo=1 force le mode démo (présentation sans compte) ; ?demo=0 revient au mode réel
+  let forceDemo = false;
+  try {
+    const d = new URLSearchParams(location.search).get("demo");
+    if (d === "1") sessionStorage.setItem("agora-demo", "1");
+    if (d === "0") sessionStorage.removeItem("agora-demo");
+    forceDemo = sessionStorage.getItem("agora-demo") === "1";
+  } catch (e) {}
+  window.Store = !forceDemo && C.SUPABASE_URL && C.SUPABASE_ANON_KEY && window.supabase ? SupabaseStore() : DemoStore();
 })();

@@ -335,6 +335,7 @@
         ${info ? `<div class="warning">${info}</div>` : ""}
         <button class="btn primary" style="width:100%;margin-top:12px">${demo ? "Entrer (mode démo)" : "Recevoir mon lien de connexion"}</button>
       </form>
+      ${!demo ? '<p class="meta" style="margin-top:10px;text-align:center"><a href="?demo=1">Découvrir la démo sans compte →</a></p>' : ""}
       ${demo ? '<p class="meta" style="margin-top:10px">Mode démo : données fictives stockées dans votre navigateur, vous êtes administrateur pour tester toutes les fonctions.</p>' : ""}
     </div></div>`;
     $("#login").addEventListener("submit", (e) => {
