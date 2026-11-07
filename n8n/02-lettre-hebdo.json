@@ -1,0 +1,255 @@
+{
+  "name": "L'Agora — Lettre hebdomadaire",
+  "nodes": [
+    {
+      "id": "4ce50beb-0df6-4621-9d88-7cc4b658606b",
+      "name": "Chaque lundi 7h10",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "10 7 * * 1"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "05c4b9c6-895b-4e06-9617-e513dc30c7bf",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "4d3883d4-8fe7-48b2-b93c-7c913d0b7ce7",
+              "name": "supabase_url",
+              "value": "https://VOTRE-PROJET.supabase.co",
+              "type": "string"
+            },
+            {
+              "id": "aee73b00-7958-40b6-a873-dd9baad49847",
+              "name": "app_url",
+              "value": "https://VOTRE-COMPTE.github.io/e-consult/",
+              "type": "string"
+            },
+            {
+              "id": "8c7121ad-f60b-4600-b0fe-6ffe6d1fe75e",
+              "name": "destinataires",
+              "value": "tout-le-personnel@VOTRE-HOPITAL.fr",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      }
+    },
+    {
+      "id": "22e934be-1f9d-4f02-be20-a6c40ded7d7f",
+      "name": "Publications de la semaine",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.supabase_url }}/rest/v1/posts_feed",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {},
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "created_at",
+              "value": "=gte.{{ $now.minus({days: 7}).toISO() }}"
+            },
+            {
+              "name": "status",
+              "value": "eq.published"
+            },
+            {
+              "name": "kind",
+              "value": "in.(news,portrait,event,kudos)"
+            },
+            {
+              "name": "order",
+              "value": "created_at.desc"
+            },
+            {
+              "name": "select",
+              "value": "kind,title,body,event_date,location,to_team"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Supabase service key (header apikey)"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "f3d43043-c8e5-4d68-94e2-fb22b1baf4d6",
+      "name": "Menus de la semaine",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Config').first().json.supabase_url }}/rest/v1/menus",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {},
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "day",
+              "value": "=gte.{{ $now.startOf('week').toISODate() }}"
+            },
+            {
+              "name": "order",
+              "value": "day.asc"
+            },
+            {
+              "name": "limit",
+              "value": "5"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Supabase service key (header apikey)"
+        }
+      },
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "id": "159c880e-e6ee-4f31-901c-848fefef26b2",
+      "name": "Composer la lettre",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const cfg = $('Config').first().json;\nconst posts = $('Publications de la semaine').all().map(i => i.json).filter(p => p.title);\nconst menus = $input.all().map(i => i.json).filter(m => m.day);\nconst esc = s => String(s ?? '').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));\nconst sec = (t, k, f) => { const l = posts.filter(p => p.kind === k); return l.length ? `<h3>${t}</h3><ul>${l.map(f).join('')}</ul>` : ''; };\nconst html = `<div style=\"font-family:sans-serif;max-width:600px\"><h2 style=\"color:#0f6e7a\">L'Agora — la semaine à l'hôpital</h2>`\n + sec('📰 Actualités', 'news', p => `<li><b>${esc(p.title)}</b><br>${esc(p.body.slice(0,200))}</li>`)\n + sec('👀 Vis ma vie', 'portrait', p => `<li><b>${esc(p.title)}</b></li>`)\n + sec('📅 Événements', 'event', p => `<li><b>${esc(p.title)}</b> — ${new Date(p.event_date).toLocaleString('fr-FR',{weekday:'long',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'})}${p.location ? ' · '+esc(p.location) : ''}</li>`)\n + sec('💐 Mur des mercis', 'kudos', p => `<li><b>${esc(p.to_team)}</b> : ${esc(p.title)}</li>`)\n + (menus.length ? `<h3>🍽️ Au self</h3><ul>${menus.map(m => `<li>${new Date(m.day).toLocaleDateString('fr-FR',{weekday:'long'})} : ${esc(m.main)} / végé : ${esc(m.veggie)}</li>`).join('')}</ul>` : '')\n + `<p><a href=\"${cfg.app_url}\">Ouvrir L'Agora</a></p><p style=\"color:#888;font-size:12px\">Rappel : aucune donnée patient sur L'Agora.</p></div>`;\nreturn [{ json: { ...cfg, html, count: posts.length } }];"
+      }
+    },
+    {
+      "id": "612b6271-8f62-4fb0-b88b-edb3d8326690",
+      "name": "Envoyer la lettre",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1100,
+        300
+      ],
+      "parameters": {
+        "fromEmail": "agora@VOTRE-HOPITAL.fr",
+        "toEmail": "={{ $json.destinataires }}",
+        "subject": "=L'Agora — votre semaine ({{ $now.toFormat('dd/MM') }})",
+        "emailFormat": "html",
+        "html": "={{ $json.html }}",
+        "options": {}
+      },
+      "credentials": {
+        "smtp": {
+          "id": "",
+          "name": "SMTP hôpital / Gmail"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Chaque lundi 7h10": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Publications de la semaine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publications de la semaine": {
+      "main": [
+        [
+          {
+            "node": "Menus de la semaine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Menus de la semaine": {
+      "main": [
+        [
+          {
+            "node": "Composer la lettre",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Composer la lettre": {
+      "main": [
+        [
+          {
+            "node": "Envoyer la lettre",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}
